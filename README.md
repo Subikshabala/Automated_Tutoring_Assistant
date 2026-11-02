@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Adaptive — AI Learning Platform
 
 An AI tutor that assesses understanding concept by concept, then teaches the
@@ -112,3 +113,6 @@ Single Next.js 16 App Router application. Server-side Route Handlers under
 
 The phase-by-phase plans used to build this live in
 [`docs/superpowers/plans/`](./docs/superpowers/plans/).
+=======
+# Automated_Tutoring_Assistant
+>>>>>>> ca474b32121c212f63e51e97b6317069cee6ff34
