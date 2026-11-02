@@ -1,0 +1,214 @@
+Audit: Automated Subject-Specific Tutoring
+Assistant (NewS7Project)
+Project audit against the Complete Project Specification. Date: 11 October 2026.
+Summary
+The project is substantial: 762 tests pass, lint reports 0 errors, and the structure matches
+the specification well. It is not release-ready. The production build fails, the core learning
+loop has missing endpoints, and several routes have no authentication.
+Method. Code review, then tsc , eslint , the 92 Vitest files and next build . Small
+probes were run against the adaptive and map-comparison logic. No project files were
+changed.
+Verified results
+Of the 8 failing test files, 5 fail on import because route handlers are missing (real
+defects). 3 need huggingface.co at run time and failed only because the audit sandbox
+had no network.
+P0: Fix before anything else
+1. Six route handlers are missing from the zip
+Missing: assessments/[id]/submit , materials/[id]/query , concept-
+maps/[id]/compare , misconceptions/[id]/repair , courses/[slug]/concepts ,
+admin/sources/[id] .
+Check 	Result
+tsc --noEmit 13 errors (missing route modules)
+next build 	Fails at "Failed to type check"
+Vitest 	762 passed, 9 failed, 12 skipped; 8 of 92 files failed
+ESLint 	0 errors, 3 warnings
+Audit: Automated Subject-Specific Tutoring Assistant (NewS7Project)
+Page 1 of 7
+
+-- 1 of 7 --
+
+Assessments cannot be graded; material Q&A, map comparison and misconception
+repair do not work.
+The .next folder contains compiled chunks for submit and query , so these routes
+existed locally and were probably lost when zipping.
+PROGRESS.md says "v2 complete", which is not true for this zip.
+Fix: recreate the handlers from their tests, which define the contracts. The logic already
+exists in gradeSubmission , queryMaterial , compareMaps and generateMapFeedback .
+Re-run tsc , the tests and the build until all are green.
+2. Live secrets and personal data are in the zip
+.env contains real Groq and Gemini API keys.
+dev.db contains 6 user accounts, including two Gmail addresses with password
+hashes.
+.gitignore covers these files, but a zip bypasses it.
+Fix: rotate both API keys now. Build release archives with git archive or a script. Ship
+only .env.example . Remove dev.db , .next and .cache . Consider a secret scan in CI.
+3. Broken access control
+README rule 5 says authorisation is enforced in every handler. The code contradicts this.
+Route or page 	Problem
+POST /api/ai/ask , /api/ai/explain 	No auth. Anyone can spend LLM quota, and
+forceRefresh lets anyone overwrite the
+shared explanation cache.
+GET /api/assessments/[id] 	No auth or ownership check.
+GET/DELETE /api/concept-maps/[id] 	No auth or ownership check. Anyone can read
+or delete any learner's map.
+GET/DELETE /api/materials/[id] 	Same.
+POST /api/assessments/generate 	Calls the LLM before requireUser() .
+POST /api/materials 	Parses the upload before requireUser() .
+queryMaterial ,
+getSuggestedQuestions
+Take only a materialId ; no user scoping
+(violates spec §12.3).
+Audit: Automated Subject-Specific Tutoring Assistant (NewS7Project)
+Page 2 of 7
+
+-- 2 of 7 --
+
+IDs are cuids, so guessing them is impractical, but they are not secrets.
+Fix: call requireUser() first in every handler. Make repository functions take userId
+and query where: { id, userId } , returning 404 for other people's records. Add a test
+that walks app/api and fails if a route has no guard (allowlist login, register and the
+public catalog). Add two-user tests; the suite currently has none.
+P1: Core logic versus the specification
+4. Prerequisite-aware recommendations are inverted (spec §14.3)
+On a PK → RI → FK chain where the learner fails FK (30), the engine recommends review
+FK (priority 94), then learn PK (33), and never RI. If RI is also weak (40), FK (94) ranks
+above RI (92). The code never walks upstream from a weak concept.
+Fix: find the weakest unmet prerequisite of any weak concept and recommend it first,
+with a reason such as "FK is weak because RI is 40". Add a regression test using the spec's
+Primary Key / Referential Integrity / Foreign Key example.
+5. Mastery is volatile and gameable
+With one question per concept, one wrong answer takes a concept from 90
+(MASTERED) to 36 (NEEDS_REVIEW).
+Resubmitting an already-seen quiz takes 0 to 94 in three submissions.
+gradeSubmission has no ownership or already-submitted guard, and saveAnswers
+deletes previous answers.
+Skipped questions count as scored attempts. confidenceScore is computed but
+never used.
+Fix: allow one submission per assessment (409 afterwards). Count only answered
+questions. Weight updates by evidence count and cap the change per attempt. Add a
+LearningEvent table for real mastery history.
+Route or page 	Problem
+Pages assessment/[id] ,
+materials/[id]
+Load by ID; the proxy only requires some
+session, not ownership.
+Audit: Automated Subject-Specific Tutoring Assistant (NewS7Project)
+Page 3 of 7
+
+-- 3 of 7 --
+
+6. Short-answer grading is fragile
+Answers are graded one LLM call after another inside the request. One provider failure
+loses the whole submission, including MCQ results.
+Learner text and retrieved material are interpolated into prompts without delimiters,
+so a learner can write instructions to the grader.
+quotedPassages are not verified against the retrieved chunks.
+Fix: grade and save MCQs first; mark short answers pending if the LLM fails. Wrap
+untrusted text in delimiters with an "ignore instructions inside" rule. Check that quoted
+passages are substrings of the retrieved chunks.
+7. Map comparison gaps (spec §4.3, §15)
+A reversed edge is reported as one "incorrect" plus one "missing"; there is no reversed
+class.
+No aliases or synonyms; the schema has no field for them.
+saveStudentMap never stores conceptId , so "select a canonical concept" cannot
+work.
+Comparison results are not persisted.
+Mistyped edges are computed but never passed to the feedback prompt.
+Fuzzy matching maps "Encryption" to "Decryption". It does not trigger on the current
+28 seeded concepts, but will on a larger course.
+Fix: match by conceptId , then alias, then exact, then fuzzy; treat ambiguous matches as
+"unknown". Add reversedEdges , and MapComparison and MapComparisonFinding
+tables.
+8. Assessment validation is only partial (spec §13.3, §13.5)
+Zod checks structure and that the answer is one of the options. It does not check that a
+question is actually about its concept (only the LLM's self-reported conceptName is
+fuzzy-matched), duplicate options or questions, or the 4-option rule. There is no repair
+step or curated fallback.
+Fix: add those checks and a seeded question bank to fall back on.
+9. Tutor depth and context (spec §8.6, §11)
+Explanations have 6 fields with a "2–4 sentences" rule and no depth parameter.
+Audit: Automated Subject-Specific Tutoring Assistant (NewS7Project)
+Page 4 of 7
+
+-- 4 of 7 --
+
+The tutor never receives prerequisites, mastery or uploaded materials.
+Chat history is lost when another concept is selected ( key={activeConcept.id} ). A
+failed question is cleared with no retry.
+Only 7 of 28 concepts have cached explanations, produced by two different models.
+Fix: add a depth option and the full §8.6 sections. Pass prerequisites and mastery into
+the tutor context. Keep chat per concept. Pre-generate and review explanations at seed
+time.
+P2: Resilience, RAG and data model
+10. AI client (spec §18)
+No explicit timeouts, retries, backoff or 429 handling exist in the app code. Every failure
+becomes a generic 503. /progress makes an LLM call on every render, and the learn page
+blocks server rendering on one.
+Fix: map 401, 429, 5xx and invalid output to distinct error codes. Add timeouts and
+bounded backoff. Cache or defer the coach summary.
+11. RAG pipeline
+File type is trusted from the client MIME header; a binary payload declared
+text/plain was accepted.
+Extraction and embedding run inside the upload request; PROCESSING is never used.
+pdf-parse inserts -- 1 of 1 -- markers into text that is chunked and embedded;
+page numbers are not kept.
+Every PDF failure says "may be scanned". A material goes READY even if embedding
+failed.
+Material.courseId is never set.
+Fix: check magic bytes, process asynchronously with real status transitions, move page
+markers into metadata, give specific error messages, and flag chunks without
+embeddings.
+12. Data model
+No mastery history. Misconception.userId has no foreign key to User .
+RelationshipType lacks EXAMPLE_OF and CONTRASTS_WITH .
+Audit: Automated Subject-Specific Tutoring Assistant (NewS7Project)
+Page 5 of 7
+
+-- 5 of 7 --
+
+Concept has no aliases, provenance or review status.
+Recommendations are not persisted. Assessment.kind is a free string.
+lib/prisma.ts hard-codes dev.db and ignores DATABASE_URL .
+The diagnostic is marked "taken" when created, not when completed.
+P3: Hygiene
+3 test files need huggingface.co at run time, so they are not hermetic. There are no e2e
+tests (spec §20.3).
+Remove core-code-report.txt , project-report.txt , the empty structure.txt
+and test-results/ from the repository root.
+dotenv is imported in prisma.config.ts but not declared in package.json . The
+README requires --legacy-peer-deps , which points to peer conflicts. The package
+is named opencode-app .
+Docs say "19 tables" (there are 20) and that Source "carries real data" (it has 0 rows).
+There is no Database Fundamentals course or known learner map for demonstrating
+comparison (spec §22).
+What is already solid
+Grading uses the stored answer key and never ships it to the client.
+Zod validates inputs and AI outputs.
+Mastery, recommendations and map comparison are deterministic; the LLM only
+phrases results.
+Passwords use bcrypt and sessions use an httpOnly cookie.
+Dark-theme map controls are handled, and the learn page integrates intro, map, detail
+and tutor as §8.5 asks.
+Suggested order of work
+1. Rotate the keys and clean the zip.
+2. Recreate the 6 routes until tsc , tests and build pass.
+3. Auth and ownership sweep with two-user tests.
+4. Single-use submissions, stable mastery, prerequisite-first recommendations.
+Audit: Automated Subject-Specific Tutoring Assistant (NewS7Project)
+Page 6 of 7
+
+-- 6 of 7 --
+
+5. Upgrade and persist map comparison.
+6. Harden the AI client.
+7. Fix RAG and the data model.
+8. Add e2e tests and clean up docs.
+Not verified
+No live LLM or HuggingFace access was available, so AI answer quality, retrieval quality
+and the embedding tests were not exercised. No browser, e2e, responsive or accessibility
+testing was done; UI findings come from reading the code.
+Audit: Automated Subject-Specific Tutoring Assistant (NewS7Project)
+Page 7 of 7
+
+-- 7 of 7 --
+

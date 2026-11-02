@@ -1,0 +1,411 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum MasteryStatus {
+  NOT_STARTED
+  LEARNING
+  PRACTICING
+  MASTERED
+  NEEDS_REVIEW
+}
+
+enum RelationshipType {
+  PREREQUISITE_OF
+  RELATED_TO
+  PART_OF
+  LEADS_TO
+}
+
+enum QuestionType {
+  MCQ
+  SHORT_ANSWER
+  SCENARIO
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum SourceStatus {
+  DRAFT
+  INGESTED
+  PROCESSED
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MaterialStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(USER)
+  /// JSON string[] of course slugs whose diagnostic is done or skipped.
+  diagnosedCourses String @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions    LearningSession[]
+  progress    LearningProgress[]
+  mastery     Mastery[]
+  assessments Assessment[]
+  materials   Material[]
+  conceptMaps ConceptMap[]
+}
+
+model Course {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  title       String
+  description String
+  category    String
+  difficulty  Difficulty @default(BEGINNER)
+  estimatedHours Int     @default(0)
+  published   Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  modules     Module[]
+  concepts    Concept[]
+  sources     Source[]
+  sessions    LearningSession[]
+  conceptMaps ConceptMap[]
+
+  @@index([category])
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String
+  order       Int
+  createdAt   DateTime @default(now())
+
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topics   Topic[]
+  concepts Concept[]
+
+  @@unique([courseId, order])
+  @@index([courseId])
+}
+
+model Topic {
+  id          String   @id @default(cuid())
+  moduleId    String
+  title       String
+  description String
+  order       Int
+  createdAt   DateTime @default(now())
+
+  module   Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  concepts Concept[]
+  sources  Source[]
+  sessions LearningSession[]
+
+  @@unique([moduleId, order])
+  @@index([moduleId])
+}
+
+model Concept {
+  id          String     @id @default(cuid())
+  courseId    String
+  moduleId    String?
+  topicId     String?
+  name        String
+  definition  String
+  difficulty  Difficulty @default(BEGINNER)
+  objectives  String     @default("[]")
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  course Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  topic  Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  outgoing      ConceptRelationship[] @relation("FromConcept")
+  incoming      ConceptRelationship[] @relation("ToConcept")
+  mastery       Mastery[]
+  misconceptions Misconception[]
+  questions     Question[]
+  progress      LearningProgress[]
+  mapNodes      ConceptMapNode[]
+  explanation   ConceptExplanation?
+
+  @@index([courseId])
+  @@index([topicId])
+}
+
+model ConceptRelationship {
+  id        String           @id @default(cuid())
+  fromId    String
+  toId      String
+  type      RelationshipType
+  strength  Float            @default(1.0)
+  createdAt DateTime         @default(now())
+
+  from Concept @relation("FromConcept", fields: [fromId], references: [id], onDelete: Cascade)
+  to   Concept @relation("ToConcept", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, type])
+  @@index([fromId])
+  @@index([toId])
+}
+
+model Source {
+  id              String       @id @default(cuid())
+  courseId        String?
+  topicId         String?
+  title           String
+  url             String?
+  publisher       String?
+  authorityLevel  Int          @default(4)
+  publicationDate DateTime?
+  version         String?
+  status          SourceStatus @default(DRAFT)
+  lastVerifiedAt  DateTime?
+  createdAt       DateTime     @default(now())
+
+  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  topic  Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([courseId])
+}
+
+model LearningSession {
+  id        String    @id @default(cuid())
+  userId    String
+  courseId  String
+  topicId   String?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic  Topic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([userId, courseId])
+}
+
+model LearningProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  conceptId   String
+  completed   Boolean  @default(false)
+  timeSpentSec Int     @default(0)
+  lastViewedAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conceptId])
+}
+
+model Mastery {
+  id               String        @id @default(cuid())
+  userId           String
+  conceptId        String
+  masteryScore     Float         @default(0)
+  confidenceScore  Float         @default(0)
+  attemptCount     Int           @default(0)
+  correctCount     Int           @default(0)
+  incorrectCount   Int           @default(0)
+  status           MasteryStatus @default(NOT_STARTED)
+  lastAssessmentAt DateTime?
+  lastInteractionAt DateTime     @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conceptId])
+  @@index([userId, status])
+}
+
+model Misconception {
+  id          String   @id @default(cuid())
+  userId      String
+  conceptId   String
+  description String
+  evidence    String
+  resolved    Boolean  @default(false)
+  detectedAt  DateTime @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([userId, resolved])
+}
+
+model Assessment {
+  id          String    @id @default(cuid())
+  userId      String
+  courseId    String?
+  topicId     String?
+  kind        String    @default("practice")
+  score       Float?
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions Question[]
+  answers   Answer[]
+
+  @@index([userId])
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  assessmentId  String
+  conceptId     String
+  type          QuestionType
+  prompt        String
+  options       String       @default("[]")
+  correctAnswer String
+  explanation   String
+  difficulty    Difficulty   @default(BEGINNER)
+  order         Int          @default(0)
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  concept    Concept    @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  answers    Answer[]
+
+  @@index([assessmentId])
+}
+
+model Answer {
+  id           String   @id @default(cuid())
+  assessmentId String
+  questionId   String
+  response     String
+  isCorrect    Boolean
+  score        Float    @default(0)
+  feedback     String   @default("")
+  createdAt    DateTime @default(now())
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, questionId])
+}
+
+model Material {
+  id         String         @id @default(cuid())
+  userId     String
+  courseId   String?
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  status     MaterialStatus @default(UPLOADED)
+  error      String?
+  createdAt  DateTime       @default(now())
+
+  /// JSON string[] of generated starter questions. Empty until generated.
+  suggestions String @default("")
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks MaterialChunk[]
+
+  @@index([userId])
+}
+
+model MaterialChunk {
+  id         String @id @default(cuid())
+  materialId String
+  content    String
+  tokenCount Int    @default(0)
+  order      Int
+
+  /// JSON-encoded number[384] from all-MiniLM-L6-v2. Empty until embedded.
+  embedding  String @default("")
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, order])
+  @@index([materialId])
+}
+
+model ConceptMap {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  nodes  ConceptMapNode[]
+  edges  ConceptMapEdge[]
+
+  @@index([userId, courseId])
+}
+
+model ConceptMapNode {
+  id        String  @id @default(cuid())
+  mapId     String
+  conceptId String?
+  label     String
+  x         Float   @default(0)
+  y         Float   @default(0)
+
+  map     ConceptMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  concept Concept?   @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+
+  outgoing ConceptMapEdge[] @relation("MapFrom")
+  incoming ConceptMapEdge[] @relation("MapTo")
+
+  @@index([mapId])
+}
+
+model ConceptMapEdge {
+  id     String           @id @default(cuid())
+  mapId  String
+  fromId String
+  toId   String
+  type   RelationshipType @default(RELATED_TO)
+  label  String?
+
+  map  ConceptMap     @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  from ConceptMapNode @relation("MapFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   ConceptMapNode @relation("MapTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([mapId, fromId, toId])
+  @@index([mapId])
+}
+
+model ConceptExplanation {
+  id                String   @id @default(cuid())
+  conceptId         String   @unique
+  title             String
+  simpleExplanation String
+  whyItMatters      String
+  example           String
+  keyPoints         String   @default("[]")
+  checkQuestion     String
+  model             String
+  createdAt         DateTime @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+}

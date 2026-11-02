@@ -1,0 +1,1464 @@
+]633;E;{   for f in     lib/ai/providers.ts     lib/ai/client.ts     lib/ai/tutor.ts     lib/adaptive.ts     lib/diagnostic.ts     lib/mastery.ts     lib/map-compare.ts     lib/text/extract.ts     lib/text/embed.ts     lib/text/retrieve.ts     app/api/ai/ask/route.ts     app/api/ai/explain/route.ts     app/api/materials/route.ts     app/api/materials/'[id]'/query/route.ts     app/api/recommendations/route.ts     docs/DEMO.md\x3b   do     if [ -f "$f" ]\x3b then       printf '\\n\\n===== %s =====\\n' "$f"\x3b       cat "$f"\x3b     fi\x3b   done\x3b } > core-code-report.txt;b3a24be3-836f-4b0f-bb1f-2def5b9fa247]633;C
+
+===== lib/ai/providers.ts =====
+import { ApiError } from '@/lib/api'
+
+export type ProviderName =
+  | 'groq'
+  | 'gemini'
+  | 'openrouter'
+  | 'cerebras'
+  | 'ollama'
+
+type ProviderSpec = {
+  baseURL: string
+  envKey: string
+  defaultModel: string
+  /** Constrained decoding against a JSON schema, not just "valid JSON". */
+  supportsStrictJson: boolean
+  /** Local providers need no credential. */
+  keyless?: boolean
+}
+
+const PROVIDERS: Record<ProviderName, ProviderSpec> = {
+  groq: {
+    baseURL: 'https://api.groq.com/openai/v1',
+    envKey: 'GROQ_API_KEY',
+    defaultModel: 'openai/gpt-oss-20b',
+    supportsStrictJson: true,
+  },
+  gemini: {
+    baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    envKey: 'GEMINI_API_KEY',
+    defaultModel: 'gemini-2.5-flash',
+    supportsStrictJson: false,
+  },
+  openrouter: {
+    baseURL: 'https://openrouter.ai/api/v1',
+    envKey: 'OPENROUTER_API_KEY',
+    defaultModel: 'meta-llama/llama-3.3-70b-instruct:free',
+    supportsStrictJson: false,
+  },
+  cerebras: {
+    baseURL: 'https://api.cerebras.ai/v1',
+    envKey: 'CEREBRAS_API_KEY',
+    defaultModel: 'qwen-3.8-27b',
+    supportsStrictJson: false,
+  },
+  ollama: {
+    baseURL: 'http://localhost:11434/v1',
+    envKey: 'OLLAMA_API_KEY',
+    defaultModel: 'qwen2.5:7b',
+    supportsStrictJson: false,
+    keyless: true,
+  },
+}
+
+export type ResolvedProvider = {
+  name: ProviderName
+  baseURL: string
+  apiKey: string
+  model: string
+  supportsStrictJson: boolean
+}
+
+export function resolveProvider(): ResolvedProvider {
+  const name = (process.env.LLM_PROVIDER ?? 'groq') as ProviderName
+  const spec = PROVIDERS[name]
+
+  if (!spec) {
+    throw new ApiError(
+      'AI_NOT_CONFIGURED',
+      `Unknown LLM_PROVIDER "${name}". Expected one of: ${Object.keys(PROVIDERS).join(', ')}`,
+      500,
+    )
+  }
+
+  const apiKey = process.env[spec.envKey] ?? (spec.keyless ? 'ollama' : '')
+  if (!apiKey) {
+    throw new ApiError(
+      'AI_NOT_CONFIGURED',
+      `${spec.envKey} is not set. Get a free key and add it to .env`,
+      500,
+    )
+  }
+
+  return {
+    name,
+    baseURL: spec.baseURL,
+    apiKey,
+    model: process.env.LLM_MODEL ?? spec.defaultModel,
+    supportsStrictJson: spec.supportsStrictJson,
+  }
+}
+
+
+===== lib/ai/client.ts =====
+import OpenAI from 'openai'
+import { type ZodType, toJSONSchema } from 'zod'
+import { ApiError } from '@/lib/api'
+import { resolveProvider } from '@/lib/ai/providers'
+
+function stripFence(text: string): string {
+  const trimmed = text.trim()
+  if (!trimmed.startsWith('```')) return trimmed
+  return trimmed
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/, '')
+    .trim()
+}
+
+export type GenerateOptions<T> = {
+  prompt: string
+  schema: ZodType<T>
+  system?: string
+  temperature?: number
+  /** Used as the json_schema name on strict providers. */
+  schemaName?: string
+}
+
+export async function generateStructured<T>({
+  prompt,
+  schema,
+  system,
+  temperature = 0.4,
+  schemaName = 'response',
+}: GenerateOptions<T>): Promise<T> {
+  const provider = resolveProvider()
+
+  const client = new OpenAI({
+    apiKey: provider.apiKey,
+    baseURL: provider.baseURL,
+  })
+
+  // Strict mode constrains decoding to the schema. Everything else gets
+  // json_object plus a prompt-level instruction and Zod as the net.
+  const responseFormat = provider.supportsStrictJson
+    ? ({
+        type: 'json_schema' as const,
+        json_schema: {
+          name: schemaName,
+          strict: true,
+          schema: toJSONSchema(schema),
+        },
+      })
+    : ({ type: 'json_object' as const })
+
+  let text: string
+  try {
+    const completion = await client.chat.completions.create({
+      model: provider.model,
+      temperature,
+      messages: [
+        ...(system ? [{ role: 'system' as const, content: system }] : []),
+        { role: 'user' as const, content: prompt },
+      ],
+      response_format: responseFormat,
+    })
+    text = completion.choices[0]?.message?.content ?? ''
+  } catch (error) {
+    console.error(`[${provider.name}] request failed:`, error)
+    throw new ApiError(
+      'AI_UNAVAILABLE',
+      'The AI service is temporarily unavailable. Try again.',
+      503,
+    )
+  }
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stripFence(text))
+  } catch {
+    console.error(`[${provider.name}] non-JSON response:`, text.slice(0, 500))
+    throw new ApiError(
+      'AI_INVALID_RESPONSE',
+      'The AI returned an unreadable response. Try again.',
+      502,
+    )
+  }
+
+  const result = schema.safeParse(parsed)
+  if (!result.success) {
+    console.error(
+      `[${provider.name}] schema validation failed:`,
+      result.error.issues,
+    )
+    throw new ApiError(
+      'AI_INVALID_RESPONSE',
+      'The AI response did not match the expected format. Try again.',
+      502,
+    )
+  }
+
+  return result.data
+}
+
+
+===== lib/ai/tutor.ts =====
+import { ApiError } from '@/lib/api'
+import { generateStructured } from '@/lib/ai/client'
+import { resolveProvider } from '@/lib/ai/providers'
+import { askPrompt, explainPrompt, TUTOR_SYSTEM, type ChatTurn, type TutorContext } from '@/lib/ai/prompts'
+import {
+  conceptExplanationSchema,
+  tutorAnswerSchema,
+  type ConceptExplanation,
+  type TutorAnswer,
+} from '@/lib/schemas/ai'
+import { findConceptById } from '@/lib/repositories/concept'
+import {
+  findCachedExplanation,
+  saveExplanation,
+} from '@/lib/repositories/explanation'
+
+async function loadContext(conceptId: string): Promise<TutorContext> {
+  const concept = await findConceptById(conceptId)
+  if (!concept) {
+    throw new ApiError('NOT_FOUND', `No concept with id "${conceptId}"`, 404)
+  }
+  return {
+    conceptName: concept.name,
+    conceptDefinition: concept.definition,
+    courseTitle: concept.courseTitle,
+    topicTitle: concept.topicTitle,
+    objectives: concept.objectives,
+  }
+}
+
+export async function explainConcept(
+  conceptId: string,
+  options: { forceRefresh?: boolean } = {},
+): Promise<{ explanation: ConceptExplanation; cached: boolean }> {
+  const context = await loadContext(conceptId)
+
+  if (!options.forceRefresh) {
+    const cached = await findCachedExplanation(conceptId)
+    if (cached) return { explanation: cached, cached: true }
+  }
+
+  const explanation = await generateStructured({
+    prompt: explainPrompt(context),
+    schema: conceptExplanationSchema,
+    system: TUTOR_SYSTEM,
+    temperature: 0.3,
+  })
+
+  await saveExplanation(
+    conceptId,
+    explanation,
+    resolveProvider().model,
+  )
+
+  return { explanation, cached: false }
+}
+
+export async function answerQuestion(
+  conceptId: string,
+  question: string,
+  history: ChatTurn[],
+): Promise<TutorAnswer> {
+  const context = await loadContext(conceptId)
+
+  return generateStructured({
+    prompt: askPrompt({ ...context, question, history }),
+    schema: tutorAnswerSchema,
+    system: TUTOR_SYSTEM,
+    temperature: 0.5,
+  })
+}
+
+
+===== lib/adaptive.ts =====
+import type { ConceptGraph } from '@/lib/schemas/concept'
+import type { MasteryWithConcept } from '@/lib/repositories/mastery'
+import type {
+  LearningAction,
+  Recommendation,
+} from '@/lib/schemas/recommendation'
+
+/** A prerequisite must reach this score before its dependents unlock. */
+export const READINESS_THRESHOLD = 65
+
+/** At or above this, a concept is considered done and drops out of recommendations. */
+export const MASTERED_THRESHOLD = 80
+
+/** Below this, a concept needs reteaching rather than practice. */
+export const REVIEW_THRESHOLD = 50
+
+const DEFAULT_LIMIT = 6
+
+export function isReady(
+  conceptId: string,
+  graph: ConceptGraph,
+  scoreByConcept: Map<string, number>,
+): boolean {
+  const prerequisites = graph.relationships.filter(
+    (r) => r.type === 'PREREQUISITE_OF' && r.toId === conceptId,
+  )
+
+  return prerequisites.every(
+    (r) => (scoreByConcept.get(r.fromId) ?? 0) >= READINESS_THRESHOLD,
+  )
+}
+
+function actionFor(score: number, started: boolean): LearningAction {
+  if (!started) return 'LEARN'
+  if (score < REVIEW_THRESHOLD) return 'REVIEW'
+  return 'PRACTISE'
+}
+
+/**
+ * Priority bands, highest first:
+ *   REVIEW   90..100 — a weak foundation blocks everything downstream
+ *   PRACTISE 60..80  — close to mastery, cheap to finish
+ *   LEARN    30..55  — new ground, ready to start
+ * Within a band, lower mastery and more unlocked dependents rank higher.
+ */
+function priorityFor(
+  action: LearningAction,
+  score: number,
+  unlocksCount: number,
+): number {
+  const unlockBonus = Math.min(10, unlocksCount * 3)
+
+  if (action === 'REVIEW') {
+    return Math.min(100, 90 + Math.round((REVIEW_THRESHOLD - score) / 5))
+  }
+  if (action === 'PRACTISE') {
+    return Math.min(
+      80,
+      60 + Math.round((MASTERED_THRESHOLD - score) / 2) + unlockBonus,
+    )
+  }
+  return Math.min(55, 30 + unlockBonus)
+}
+
+// ---------------------------------------------------------------------------
+// Situation classification
+// ---------------------------------------------------------------------------
+
+export type Situation =
+  | 'FIRST_STEP'
+  | 'NEWLY_UNLOCKED'
+  | 'READY'
+  | 'GATEWAY'
+  | 'NEARLY_THERE'
+  | 'SHAKY'
+  | 'BLOCKED_DOWNSTREAM'
+  | 'FOUNDATIONAL_GAP'
+
+export type SituationInput = {
+  score: number
+  started: boolean
+  /** How many concepts the learner has touched in this course. */
+  totalStarted: number
+  unlocksCount: number
+  prerequisiteCount: number
+  /** True when every prerequisite crossed the threshold on the last attempt. */
+  justUnlocked?: boolean
+}
+
+/** Unlocking this many concepts makes a concept worth calling out. */
+const GATEWAY_THRESHOLD = 3
+
+export function classifySituation(input: SituationInput): Situation {
+  if (!input.started) {
+    if (input.totalStarted === 0 && input.prerequisiteCount === 0) {
+      return 'FIRST_STEP'
+    }
+    if (input.justUnlocked) return 'NEWLY_UNLOCKED'
+    if (input.unlocksCount >= GATEWAY_THRESHOLD) return 'GATEWAY'
+    return 'READY'
+  }
+
+  if (input.score >= 65) return 'NEARLY_THERE'
+  if (input.score >= 50) return 'SHAKY'
+  return input.unlocksCount > 0 ? 'BLOCKED_DOWNSTREAM' : 'FOUNDATIONAL_GAP'
+}
+
+// ---------------------------------------------------------------------------
+// Situation-aware copy
+// ---------------------------------------------------------------------------
+
+export type ReasonInput = {
+  conceptName: string
+  score: number
+  unlocks: string[]
+  prerequisites: string[]
+  /** Position in the recommendation list, used to vary phrasing. */
+  index: number
+}
+
+function list(names: string[], limit = 2): string {
+  const taken = names.slice(0, limit)
+  if (taken.length === 0) return ''
+  if (taken.length === 1) return taken[0]
+  return `${taken.slice(0, -1).join(', ')} and ${taken[taken.length - 1]}`
+}
+
+type Phrasing = (i: ReasonInput) => string
+
+const PHRASINGS: Record<Situation, Phrasing[]> = {
+  FIRST_STEP: [
+    (i) => `Start here. ${i.conceptName} has no prerequisites, and most of this course builds on it.`,
+    (i) => `${i.conceptName} is the entry point — nothing else needs to come first.`,
+  ],
+
+  NEWLY_UNLOCKED: [
+    (i) => `You just cleared ${list(i.prerequisites)}, which opens ${i.conceptName}.`,
+    (i) => `${i.conceptName} is now available — ${list(i.prerequisites)} is solid enough to build on.`,
+  ],
+
+  GATEWAY: [
+    (i) => `${i.conceptName} unlocks ${i.unlocks.length} later concepts, including ${list(i.unlocks)}. Worth doing before the others.`,
+    (i) => `A lot depends on ${i.conceptName} — ${list(i.unlocks)} and more sit behind it.`,
+  ],
+
+  READY: [
+    (i) => `${i.conceptName} is open. Its prerequisites are covered.`,
+    (i) => `Nothing is blocking ${i.conceptName}${i.unlocks.length > 0 ? `, and it leads into ${list(i.unlocks, 1)}` : ''}.`,
+    (i) => `You can take ${i.conceptName} next whenever you want.`,
+  ],
+
+  NEARLY_THERE: [
+    (i) => `${i.score} on ${i.conceptName}. One more set of questions should finish it.`,
+    (i) => `${i.conceptName} is close — ${i.score} out of 100. The gap is small.`,
+  ],
+
+  SHAKY: [
+    (i) => `${i.score} on ${i.conceptName} suggests the shape is there but the detail is not.`,
+    (i) => `You are halfway on ${i.conceptName} at ${i.score}. Another pass should settle it.`,
+  ],
+
+  BLOCKED_DOWNSTREAM: [
+    (i) => `${i.conceptName} is at ${i.score}, and ${list(i.unlocks)} depends on it. Worth fixing before moving on.`,
+    (i) => `${list(i.unlocks)} will be harder while ${i.conceptName} sits at ${i.score}.`,
+  ],
+
+  FOUNDATIONAL_GAP: [
+    (i) => `${i.score} on ${i.conceptName}. Reread the explanation before trying more questions.`,
+    (i) => `${i.conceptName} has not landed yet — ${i.score} out of 100.`,
+  ],
+}
+
+export function reasonFor(situation: Situation, input: ReasonInput): string {
+  const options = PHRASINGS[situation]
+  return options[input.index % options.length](input)
+}
+
+// ---------------------------------------------------------------------------
+// Main recommend function
+// ---------------------------------------------------------------------------
+
+export function recommend(
+  graph: ConceptGraph,
+  masteryRecords: MasteryWithConcept[],
+  courseSlug: string,
+  limit: number = DEFAULT_LIMIT,
+): Recommendation[] {
+  if (graph.concepts.length === 0) return []
+
+  const scoreByConcept = new Map(
+    masteryRecords.map((m) => [m.conceptId, m.masteryScore]),
+  )
+  const startedConcepts = new Set(
+    masteryRecords.filter((m) => m.attemptCount > 0).map((m) => m.conceptId),
+  )
+  const startedCount = startedConcepts.size
+  const nameById = new Map(graph.concepts.map((c) => [c.id, c.name]))
+
+  const unlocksByConcept = new Map<string, string[]>()
+  for (const rel of graph.relationships) {
+    if (rel.type !== 'PREREQUISITE_OF') continue
+    const targetName = nameById.get(rel.toId)
+    if (!targetName) continue
+    const bucket = unlocksByConcept.get(rel.fromId)
+    if (bucket) {
+      bucket.push(targetName)
+    } else {
+      unlocksByConcept.set(rel.fromId, [targetName])
+    }
+  }
+
+  // Build a map of prerequisite names for each concept.
+  const prerequisiteNamesByConcept = new Map<string, string[]>()
+  for (const rel of graph.relationships) {
+    if (rel.type !== 'PREREQUISITE_OF') continue
+    const fromName = nameById.get(rel.fromId)
+    if (!fromName) continue
+    const bucket = prerequisiteNamesByConcept.get(rel.toId)
+    if (bucket) {
+      bucket.push(fromName)
+    } else {
+      prerequisiteNamesByConcept.set(rel.toId, [fromName])
+    }
+  }
+
+  const prerequisiteCount = (id: string) =>
+    graph.relationships.filter(
+      (r) => r.type === 'PREREQUISITE_OF' && r.toId === id,
+    ).length
+
+  const recommendations: Recommendation[] = []
+
+  for (const concept of graph.concepts) {
+    const score = scoreByConcept.get(concept.id) ?? 0
+    const started = startedConcepts.has(concept.id)
+
+    if (score >= MASTERED_THRESHOLD) continue
+    if (!started && !isReady(concept.id, graph, scoreByConcept)) continue
+
+    const action = actionFor(score, started)
+    const unlocks = unlocksByConcept.get(concept.id) ?? []
+    const prerequisites = prerequisiteNamesByConcept.get(concept.id) ?? []
+
+    const situation = classifySituation({
+      score,
+      started,
+      totalStarted: startedCount,
+      unlocksCount: unlocks.length,
+      prerequisiteCount: prerequisiteCount(concept.id),
+    })
+
+    recommendations.push({
+      conceptId: concept.id,
+      conceptName: concept.name,
+      courseSlug,
+      topicId: concept.topicId ?? null,
+      action,
+      situation,
+      // Index assigned after sorting, below.
+      reason: '',
+      priority: priorityFor(action, score, unlocks.length),
+      masteryScore: score,
+      unlocks,
+      prerequisites,
+    })
+  }
+
+  // Sort first, then write reasons — phrasing varies by final position.
+  return recommendations
+    .sort((a, b) => b.priority - a.priority)
+    .slice(0, limit)
+    .map((rec, index) => ({
+      ...rec,
+      reason: reasonFor(rec.situation, {
+        conceptName: rec.conceptName,
+        score: rec.masteryScore,
+        unlocks: rec.unlocks,
+        prerequisites: rec.prerequisites,
+        index,
+      }),
+    }))
+}
+
+
+===== lib/diagnostic.ts =====
+import { computeDepths } from '@/lib/concept-layout'
+import type { ConceptDto, ConceptGraph } from '@/lib/schemas/concept'
+
+export type DiagnosticConcept = ConceptDto & { depth: number }
+
+export const DEFAULT_DIAGNOSTIC_SIZE = 7
+
+/**
+ * Picks concepts spanning the prerequisite graph's depth range.
+ *
+ * A diagnostic should locate the boundary of understanding, so it needs
+ * coverage from roots to leaves rather than a random sample that might
+ * land entirely in the shallows.
+ */
+export function sampleDiagnosticConcepts(
+  graph: ConceptGraph,
+  count: number = DEFAULT_DIAGNOSTIC_SIZE,
+): DiagnosticConcept[] {
+  if (graph.concepts.length === 0) return []
+  if (graph.concepts.length <= count) {
+    const depths = computeDepths(graph.concepts, graph.relationships)
+    return graph.concepts.map((c) => ({ ...c, depth: depths.get(c.id) ?? 0 }))
+  }
+
+  const depths = computeDepths(graph.concepts, graph.relationships)
+
+  const byDepth = new Map<number, ConceptDto[]>()
+  for (const concept of graph.concepts) {
+    const depth = depths.get(concept.id) ?? 0
+    const bucket = byDepth.get(depth)
+    if (bucket) bucket.push(concept)
+    else byDepth.set(depth, [concept])
+  }
+
+  const levels = [...byDepth.keys()].sort((a, b) => a - b)
+  const picked: DiagnosticConcept[] = []
+  const taken = new Set<string>()
+
+  const take = (depth: number) => {
+    const bucket = byDepth.get(depth)
+    if (!bucket) return
+    // Name sort keeps the pick deterministic across runs.
+    const next = [...bucket]
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .find((c) => !taken.has(c.id))
+    if (!next) return
+    taken.add(next.id)
+    picked.push({ ...next, depth })
+  }
+
+  // Anchor the extremes first — they define the range being probed.
+  take(levels[0])
+  if (levels.length > 1) take(levels[levels.length - 1])
+
+  // Fill the middle, cycling depth levels so coverage stays even.
+  let cursor = 0
+  while (picked.length < count && taken.size < graph.concepts.length) {
+    take(levels[cursor % levels.length])
+    cursor += 1
+    if (cursor > levels.length * graph.concepts.length) break
+  }
+
+  return picked.slice(0, count)
+}
+
+
+===== lib/mastery.ts =====
+import type { MasteryStatus } from '@/lib/schemas/common'
+
+export type MasteryState = {
+  masteryScore: number
+  confidenceScore: number
+  attemptCount: number
+  correctCount: number
+  incorrectCount: number
+}
+
+export type Recommendation = 'ADVANCE' | 'PRACTICE' | 'RETEACH'
+
+/** Weight given to the newest attempt. Older attempts decay geometrically. */
+const RECENCY_WEIGHT = 0.6
+
+/** Attempts needed before MASTERED can be awarded. */
+const MASTERY_MIN_ATTEMPTS = 2
+
+export function masteryStatusFor(
+  score: number,
+  attemptCount: number,
+): MasteryStatus {
+  if (attemptCount === 0) return 'NOT_STARTED'
+  if (score < 50) return 'NEEDS_REVIEW'
+  if (score < 65) return 'LEARNING'
+  if (score < 80) return 'PRACTICING'
+  return attemptCount >= MASTERY_MIN_ATTEMPTS ? 'MASTERED' : 'PRACTICING'
+}
+
+/**
+ * Exponential moving average over attempt scores.
+ * `attemptScore` is 0..1; `masteryScore` is 0..100.
+ */
+export function applyAttempt(
+  state: MasteryState,
+  attemptScore: number,
+): MasteryState {
+  const clamped = Math.min(1, Math.max(0, attemptScore))
+  const asPercent = clamped * 100
+
+  const masteryScore =
+    state.attemptCount === 0
+      ? asPercent
+      : state.masteryScore * (1 - RECENCY_WEIGHT) + asPercent * RECENCY_WEIGHT
+
+  const attemptCount = state.attemptCount + 1
+  const wasCorrect = clamped > 0.5
+
+  return {
+    masteryScore: Math.min(100, Math.max(0, Math.round(masteryScore))),
+    confidenceScore: Math.min(1, attemptCount / 5),
+    attemptCount,
+    correctCount: state.correctCount + (wasCorrect ? 1 : 0),
+    incorrectCount: state.incorrectCount + (wasCorrect ? 0 : 1),
+  }
+}
+
+export function recommendationFor(score: number): Recommendation {
+  if (score >= 80) return 'ADVANCE'
+  if (score >= 50) return 'PRACTICE'
+  return 'RETEACH'
+}
+
+
+===== lib/map-compare.ts =====
+import type { ConceptGraph, RelationshipType } from '@/lib/schemas/concept'
+import type { StudentEdge, StudentNode } from '@/lib/schemas/student-map'
+
+export function normaliseLabel(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Levenshtein distance, capped early for performance on long strings. */
+function editDistance(a: string, b: string): number {
+  if (a === b) return 0
+  if (a.length === 0) return b.length
+  if (b.length === 0) return a.length
+
+  let previous = Array.from({ length: b.length + 1 }, (_, i) => i)
+
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i]
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1
+      current[j] = Math.min(
+        current[j - 1] + 1,
+        previous[j] + 1,
+        previous[j - 1] + cost,
+      )
+    }
+    previous = current
+  }
+
+  return previous[b.length]
+}
+
+/**
+ * Matches a learner label to a canonical concept name.
+ * Exact normalised match wins; otherwise allows a small edit distance
+ * proportional to the label length, so "Tokenisation" matches
+ * "Tokenization" but "To" matches nothing.
+ */
+export function matchLabel(
+  label: string,
+  canonicalNames: string[],
+): string | null {
+  const target = normaliseLabel(label)
+  if (target.length === 0) return null
+
+  for (const name of canonicalNames) {
+    if (normaliseLabel(name) === target) return name
+  }
+
+  const tolerance = Math.floor(target.length / 6) + 1
+
+  let best: { name: string; distance: number } | null = null
+  for (const name of canonicalNames) {
+    const candidate = normaliseLabel(name)
+    if (Math.abs(candidate.length - target.length) > tolerance) continue
+
+    const distance = editDistance(target, candidate)
+    if (distance <= tolerance && (!best || distance < best.distance)) {
+      best = { name, distance }
+    }
+  }
+
+  return best?.name ?? null
+}
+
+export type EdgeRef = { from: string; to: string }
+
+export type MistypedEdge = EdgeRef & {
+  drew: RelationshipType
+  expected: RelationshipType
+}
+
+export type MapComparison = {
+  matchedConcepts: string[]
+  missingConcepts: string[]
+  unrecognisedNodes: string[]
+  correctEdges: EdgeRef[]
+  missingEdges: EdgeRef[]
+  incorrectEdges: EdgeRef[]
+  mistypedEdges: MistypedEdge[]
+  score: number
+}
+
+const CONCEPT_WEIGHT = 0.5
+const EDGE_WEIGHT = 0.5
+
+export function compareMaps(
+  canonical: ConceptGraph,
+  student: { nodes: StudentNode[]; edges: StudentEdge[] },
+): MapComparison {
+  const canonicalNames = canonical.concepts.map((c) => c.name)
+  const nameById = new Map(canonical.concepts.map((c) => [c.id, c.name]))
+
+  // Student node id -> canonical concept name (or null if unrecognised).
+  const matchByNodeId = new Map<string, string | null>()
+  const matchedConcepts = new Set<string>()
+  const unrecognisedNodes: string[] = []
+
+  for (const node of student.nodes) {
+    const match = matchLabel(node.label, canonicalNames)
+    matchByNodeId.set(node.id, match)
+    if (match) {
+      matchedConcepts.add(match)
+    } else {
+      unrecognisedNodes.push(node.label)
+    }
+  }
+
+  const missingConcepts = canonicalNames.filter(
+    (name) => !matchedConcepts.has(name),
+  )
+
+  // Canonical edges keyed by "from||to" on concept names.
+  const canonicalEdges = new Map<string, RelationshipType>()
+  for (const rel of canonical.relationships) {
+    const from = nameById.get(rel.fromId)
+    const to = nameById.get(rel.toId)
+    if (from && to) canonicalEdges.set(`${from}||${to}`, rel.type)
+  }
+
+  const correctEdges: EdgeRef[] = []
+  const incorrectEdges: EdgeRef[] = []
+  const mistypedEdges: MistypedEdge[] = []
+  const drawnKeys = new Set<string>()
+
+  for (const edge of student.edges) {
+    const from = matchByNodeId.get(edge.fromId)
+    const to = matchByNodeId.get(edge.toId)
+
+    // An edge touching an unrecognised node cannot be judged.
+    if (!from || !to) continue
+
+    const key = `${from}||${to}`
+    drawnKeys.add(key)
+
+    const expected = canonicalEdges.get(key)
+    if (expected) {
+      correctEdges.push({ from, to })
+      if (expected !== edge.type) {
+        mistypedEdges.push({ from, to, drew: edge.type, expected })
+      }
+    } else {
+      incorrectEdges.push({ from, to })
+    }
+  }
+
+  const missingEdges: EdgeRef[] = []
+  for (const key of canonicalEdges.keys()) {
+    if (drawnKeys.has(key)) continue
+    const [from, to] = key.split('||')
+    missingEdges.push({ from, to })
+  }
+
+  const conceptRatio =
+    canonicalNames.length === 0
+      ? 1
+      : matchedConcepts.size / canonicalNames.length
+
+  const edgeRatio =
+    canonicalEdges.size === 0 ? 1 : correctEdges.length / canonicalEdges.size
+
+  const penalty =
+    incorrectEdges.length > 0
+      ? Math.min(0.2, incorrectEdges.length * 0.05)
+      : 0
+
+  const raw = conceptRatio * CONCEPT_WEIGHT + edgeRatio * EDGE_WEIGHT - penalty
+  const score = Math.max(0, Math.min(100, Math.round(raw * 100)))
+
+  return {
+    matchedConcepts: [...matchedConcepts],
+    missingConcepts,
+    unrecognisedNodes,
+    correctEdges,
+    missingEdges,
+    incorrectEdges,
+    mistypedEdges,
+    score,
+  }
+}
+
+
+===== lib/text/extract.ts =====
+import { ApiError } from '@/lib/api'
+
+export const SUPPORTED_TYPES = [
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+] as const
+
+export const MAX_FILE_BYTES = 10 * 1024 * 1024
+
+export function isSupportedType(mimeType: string): boolean {
+  return (SUPPORTED_TYPES as readonly string[]).includes(mimeType)
+}
+
+export async function extractText(
+  buffer: Buffer,
+  mimeType: string,
+): Promise<string> {
+  if (!isSupportedType(mimeType)) {
+    throw new ApiError(
+      'UNSUPPORTED_TYPE',
+      'Only PDF, plain text and markdown files are supported',
+      400,
+    )
+  }
+
+  let text: string
+
+  if (mimeType === 'application/pdf') {
+    try {
+      const mod = await import('pdf-parse')
+      // pdf-parse v2 exports a class PDFParse; v1 exports a default function.
+      // In tests the module is mocked with { default: fn }.
+      if ('PDFParse' in mod) {
+        const parser = new mod.PDFParse({ data: new Uint8Array(buffer) })
+        const result = await parser.getText()
+        text = result.text
+        await parser.destroy()
+      } else {
+        const pdfParse = (mod as { default: (buf: Buffer) => Promise<{ text: string }> }).default
+        const parsed = await pdfParse(buffer)
+        text = parsed.text
+      }
+    } catch (error) {
+      if (error instanceof ApiError) throw error
+      console.error('PDF extraction failed:', error)
+      throw new ApiError(
+        'EXTRACTION_FAILED',
+        'Could not read text from this PDF. It may be scanned images rather than text.',
+        422,
+      )
+    }
+  } else {
+    text = buffer.toString('utf-8')
+  }
+
+  if (text.trim().length === 0) {
+    throw new ApiError(
+      'EXTRACTION_FAILED',
+      'No readable text was found in this file',
+      422,
+    )
+  }
+
+  return text
+}
+
+
+===== lib/text/embed.ts =====
+import { env, pipeline, type FeatureExtractionPipeline } from '@huggingface/transformers'
+
+/** all-MiniLM-L6-v2 output dimensionality. */
+export const EMBEDDING_DIM = 384
+
+const MODEL_ID = 'Xenova/all-MiniLM-L6-v2'
+
+// Keep weights out of node_modules and out of git.
+env.cacheDir = './.cache/transformers'
+env.allowRemoteModels = true
+
+type Cache = { embedder: Promise<FeatureExtractionPipeline> | undefined }
+const globalForEmbed = globalThis as unknown as Cache
+
+/**
+ * Loads once per process. The promise itself is cached so concurrent
+ * callers during the ~2s cold start share a single load.
+ */
+function getEmbedder(): Promise<FeatureExtractionPipeline> {
+  globalForEmbed.embedder ??= pipeline('feature-extraction', MODEL_ID, {
+    dtype: 'fp32',
+  }) as unknown as Promise<FeatureExtractionPipeline>
+  return globalForEmbed.embedder
+}
+
+export async function embedText(text: string): Promise<number[]> {
+  const trimmed = text.trim()
+  if (trimmed.length === 0) {
+    throw new Error('Cannot embed empty text')
+  }
+
+  const embedder = await getEmbedder()
+  const output = await embedder(trimmed, {
+    pooling: 'mean',
+    normalize: true,
+  })
+
+  return Array.from(output.data as Float32Array)
+}
+
+export async function embedBatch(texts: string[]): Promise<number[][]> {
+  if (texts.length === 0) return []
+
+  // @huggingface/transformers v3 handles batching differently,
+  // process one at a time for reliability.
+  const vectors: number[][] = []
+  for (const text of texts) {
+    vectors.push(await embedText(text))
+  }
+  return vectors
+}
+
+/** Vectors are pre-normalised, so this is effectively a dot product. */
+export function cosineSimilarity(a: number[], b: number[]): number {
+  if (a.length !== b.length || a.length === 0) return 0
+
+  let dot = 0
+  let magA = 0
+  let magB = 0
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i]
+    magA += a[i] * a[i]
+    magB += b[i] * b[i]
+  }
+
+  const denom = Math.sqrt(magA) * Math.sqrt(magB)
+  return denom === 0 ? 0 : dot / denom
+}
+
+
+===== lib/text/retrieve.ts =====
+import { cosineSimilarity, embedText } from '@/lib/text/embed'
+
+/**
+ * Function words only. Anything that narrows meaning — verbs like
+ * "summarize", nouns like "document" — must survive, because the keyword
+ * signal is the only one that catches rare literal terms.
+ */
+const STOPWORDS = new Set([
+  'a', 'an', 'and', 'are', 'as', 'at', 'be', 'been', 'being',
+  'but', 'by', 'for', 'from', 'had', 'has', 'have', 'in', 'into',
+  'is', 'it', 'its', 'of', 'on', 'or', 'that', 'the', 'their',
+  'them', 'there', 'these', 'they', 'this', 'to', 'was', 'were',
+  'will', 'with',
+])
+
+export function tokenize(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/)
+    .filter((term) => term.length > 1 && !STOPWORDS.has(term))
+}
+
+export type Chunk = {
+  id: string
+  content: string
+  order: number
+  /** Empty when the chunk predates embedding or embedding failed. */
+  embedding?: number[]
+}
+
+export type RankedChunk = Chunk & {
+  score: number
+  keywordScore: number
+  semanticScore: number
+  /** True when nothing scored above threshold and we returned leading chunks. */
+  viaFallback: boolean
+}
+
+/**
+ * TF-IDF-ish scoring: term frequency in the chunk, weighted by how rare
+ * the term is across the corpus, normalised by chunk length.
+ */
+export function rankChunks(
+  query: string,
+  chunks: Chunk[],
+  limit: number,
+): RankedChunk[] {
+  const queryTerms = tokenize(query)
+  if (queryTerms.length === 0 || chunks.length === 0) return []
+
+  const chunkTerms = chunks.map((chunk) => tokenize(chunk.content))
+
+  const documentFrequency = new Map<string, number>()
+  for (const term of new Set(queryTerms)) {
+    const count = chunkTerms.filter((terms) => terms.includes(term)).length
+    documentFrequency.set(term, count)
+  }
+
+  const scored: RankedChunk[] = chunks.map((chunk, index) => {
+    const terms = chunkTerms[index]
+    if (terms.length === 0) {
+      return { ...chunk, score: 0, keywordScore: 0, semanticScore: 0, viaFallback: false }
+    }
+
+    let score = 0
+    for (const queryTerm of queryTerms) {
+      const termFrequency = terms.filter((t) => t === queryTerm).length
+      if (termFrequency === 0) continue
+
+      const df = documentFrequency.get(queryTerm) ?? 1
+      const idf = Math.log(1 + chunks.length / df)
+      score += (termFrequency / terms.length) * idf
+    }
+
+    return { ...chunk, score, keywordScore: score, semanticScore: 0, viaFallback: false }
+  })
+
+  return scored
+    .filter((chunk) => chunk.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+}
+
+/** Semantic dominates because paraphrase is the common case. */
+const SEMANTIC_WEIGHT = 0.7
+const KEYWORD_WEIGHT = 0.3
+
+/** Below this, treat the corpus as having no real match. */
+const RELEVANCE_FLOOR = 0.12
+
+/**
+ * Fuses cosine similarity with keyword TF-IDF.
+ *
+ * When nothing clears RELEVANCE_FLOOR, returns the leading chunks flagged
+ * `viaFallback` rather than an empty array. The model can then read actual
+ * document content and decide whether it answers the question — which is a
+ * judgement it makes far better than a similarity threshold.
+ */
+export async function hybridRank(
+  query: string,
+  chunks: Chunk[],
+  limit: number,
+): Promise<RankedChunk[]> {
+  if (chunks.length === 0) return []
+
+  const keyword = rankChunks(query, chunks, chunks.length)
+  const keywordById = new Map(keyword.map((c) => [c.id, c.score]))
+  const maxKeyword = Math.max(1e-6, ...keyword.map((c) => c.score))
+
+  let queryVector: number[] | null = null
+  try {
+    queryVector = await embedText(query)
+  } catch (error) {
+    console.error('Query embedding failed, keyword only:', error)
+  }
+
+  const scored: RankedChunk[] = chunks.map((chunk) => {
+    const keywordScore = (keywordById.get(chunk.id) ?? 0) / maxKeyword
+
+    const semanticScore =
+      queryVector && chunk.embedding
+        ? Math.max(0, cosineSimilarity(queryVector, chunk.embedding))
+        : 0
+
+    // Reweight when one signal is unavailable so scores stay comparable.
+    const score =
+      queryVector && chunk.embedding
+        ? semanticScore * SEMANTIC_WEIGHT + keywordScore * KEYWORD_WEIGHT
+        : keywordScore
+
+    return { ...chunk, score, keywordScore, semanticScore, viaFallback: false }
+  })
+
+  const ordered = scored.sort((a, b) => b.score - a.score)
+  const relevant = ordered.filter((c) => c.score >= RELEVANCE_FLOOR)
+
+  if (relevant.length > 0) {
+    return relevant.slice(0, limit)
+  }
+
+  // Nothing matched. Hand the model the opening chunks — they usually carry
+  // the title and introduction, which is exactly what "what is this" needs.
+  return ordered
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .slice(0, Math.min(limit, 3))
+    .map((c) => ({ ...c, viaFallback: true }))
+}
+
+
+===== app/api/ai/ask/route.ts =====
+import { z } from 'zod'
+import { handle, ok, parseJson } from '@/lib/api'
+import { answerQuestion } from '@/lib/ai/tutor'
+
+const bodySchema = z.object({
+  conceptId: z.string().min(1),
+  question: z.string().min(1).max(1000),
+  history: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().min(1),
+      }),
+    )
+    .max(20)
+    .default([]),
+})
+
+export async function POST(request: Request) {
+  return handle(async () => {
+    const { conceptId, question, history } = await parseJson(request, bodySchema)
+    const answer = await answerQuestion(conceptId, question, history)
+    return ok(answer)
+  })
+}
+
+
+===== app/api/ai/explain/route.ts =====
+import { z } from 'zod'
+import { handle, ok, parseJson } from '@/lib/api'
+import { explainConcept } from '@/lib/ai/tutor'
+
+const bodySchema = z.object({
+  conceptId: z.string().min(1),
+  forceRefresh: z.boolean().optional(),
+})
+
+export async function POST(request: Request) {
+  return handle(async () => {
+    const { conceptId, forceRefresh } = await parseJson(request, bodySchema)
+    const result = await explainConcept(conceptId, { forceRefresh })
+    return ok(result)
+  })
+}
+
+
+===== app/api/materials/route.ts =====
+import { ApiError, handle, ok } from '@/lib/api'
+import {
+  createMaterial,
+  findMaterial,
+  listMaterials,
+  markFailed,
+  storeChunks,
+} from '@/lib/repositories/material'
+import { requireUser } from '@/lib/auth/guard'
+import {
+  extractText,
+  isSupportedType,
+  MAX_FILE_BYTES,
+} from '@/lib/text/extract'
+import { chunkText } from '@/lib/text/chunk'
+
+export async function GET() {
+  return handle(async () => {
+    const user = await requireUser()
+    const materials = await listMaterials(user.id)
+    return ok(materials)
+  })
+}
+
+export async function POST(request: Request) {
+  return handle(async () => {
+    const formData = await request.formData()
+    const file = formData.get('file')
+
+    if (!file || typeof file === 'string') {
+      throw new ApiError('VALIDATION_ERROR', 'No file was provided', 400)
+    }
+    if (!isSupportedType(file.type)) {
+      throw new ApiError(
+        'UNSUPPORTED_TYPE',
+        'Only PDF, plain text and markdown files are supported',
+        400,
+      )
+    }
+    if (file.size > MAX_FILE_BYTES) {
+      throw new ApiError('FILE_TOO_LARGE', 'Files must be under 10 MB', 400)
+    }
+
+    const user = await requireUser()
+    const material = await createMaterial({
+      userId: user.id,
+      filename: file.name,
+      mimeType: file.type,
+      sizeBytes: file.size,
+    })
+
+    try {
+      const buffer = Buffer.from(await file.arrayBuffer())
+      const text = await extractText(buffer, file.type)
+      const chunks = chunkText(text)
+
+      if (chunks.length === 0) {
+        throw new ApiError(
+          'EXTRACTION_FAILED',
+          'No readable text was found in this file',
+          422,
+        )
+      }
+
+      await storeChunks(material.id, chunks)
+    } catch (error) {
+      const message =
+        error instanceof ApiError
+          ? error.message
+          : 'Processing failed unexpectedly'
+      await markFailed(material.id, message)
+      throw error
+    }
+
+    const ready = await findMaterial(material.id)
+    return ok(ready, 201)
+  })
+}
+
+
+===== app/api/materials/[id]/query/route.ts =====
+import { handle, ok, parseJson } from '@/lib/api'
+import { materialQuerySchema } from '@/lib/schemas/material'
+import { queryMaterial } from '@/lib/ai/material'
+
+export async function POST(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  return handle(async () => {
+    const { id } = await params
+    const { question } = await parseJson(request, materialQuerySchema)
+    const result = await queryMaterial(id, question)
+    return ok(result)
+  })
+}
+
+
+===== app/api/recommendations/route.ts =====
+import { z } from 'zod'
+import { ApiError, handle, ok } from '@/lib/api'
+import { recommend } from '@/lib/adaptive'
+import { getCourseGraph } from '@/lib/repositories/concept'
+import { listMasteryForCourse } from '@/lib/repositories/mastery'
+import { requireUser } from '@/lib/auth/guard'
+
+const limitSchema = z.coerce.number().int().min(1).max(20).default(6)
+
+export async function GET(request: Request) {
+  return handle(async () => {
+    const params = new URL(request.url).searchParams
+    const courseSlug = params.get('courseSlug')
+
+    if (!courseSlug) {
+      throw new ApiError(
+        'VALIDATION_ERROR',
+        'courseSlug query parameter is required',
+        400,
+      )
+    }
+
+    const parsedLimit = limitSchema.safeParse(params.get('limit') ?? undefined)
+    const limit = parsedLimit.success ? parsedLimit.data : 6
+
+    const graph = await getCourseGraph(courseSlug)
+    if (!graph) {
+      throw new ApiError('NOT_FOUND', `No course with slug "${courseSlug}"`, 404)
+    }
+
+    const user = await requireUser()
+    const mastery = await listMasteryForCourse(user.id, courseSlug)
+
+    return ok(recommend(graph, mastery, courseSlug, limit))
+  })
+}
+
+
+===== docs/DEMO.md =====
+# Demo Walkthrough
+
+Five minutes, eight stops. Assumes `npm run db:seed && npm run db:demo`
+and a dev server on :3000.
+
+Sign in as `demo@adaptive.local` / `demo-password-1234`.
+
+---
+
+## 1. Landing — 20s
+
+Scroll to **How it works**. The connector fills as it enters view.
+
+> The claim is specific: it finds where your understanding stops, then
+> teaches from there. Everything after this is that claim being tested.
+
+## 2. Progress — 60s
+
+The centrepiece. Point at **What to do next**.
+
+> Four recommendations, four different reasons. Attention is top because
+> it is blocking two downstream concepts, not because it is next in a list.
+
+Then **Worth revisiting**.
+
+> This is not "you got question three wrong." The system identified a
+> specific belief — that attention only compares adjacent tokens — from
+> how the answer was phrased.
+
+Click **Work through it**. Note the response asks rather than tells.
+
+## 3. Concept map — 45s
+
+`/courses/generative-ai/map`.
+
+> Every course is a prerequisite graph. Animated edges are hard
+> dependencies. You are never sent somewhere you are not ready for.
+
+Click **Attention**. The panel fills. Click **Embeddings** under
+Prerequisites — the canvas pans.
+
+## 4. Learn — 60s
+
+Click a topic. Explanations are generated and cached.
+
+> Explanation, worked example, and a check question. The map is embedded
+> so structure stays visible while you read.
+
+Ask the tutor something. Answer arrives in a few seconds.
+
+## 5. Assessment — 60s
+
+**Test yourself**. Answer one short question *specifically wrong* —
+for example "each word becomes one token."
+
+> MCQs are graded deterministically. Short answers go to the model, which
+> grades understanding rather than keyword overlap — and records the
+> misconception it spots.
+
+Submit. The new misconception appears on Progress.
+
+## 6. Materials — 45s
+
+`/materials` — the seeded transformer notes.
+
+Ask: **what is this**
+
+> Worth noting: keyword search returns nothing for that question. This is
+> semantic retrieval running locally, no API.
+
+Then: **does attention only look at the previous token?**
+
+> The answer corrects the misconception from step 2, grounded in their
+> own uploaded document with the passage quoted.
+
+Then ask something off-topic. It declines.
+
+## 7. Student map — 45s
+
+`/courses/generative-ai/my-map` — the saved attempt loads.
+
+Click **Compare**.
+
+> It caught the missing Tokenization → Embeddings link and the invented
+> Tokenization → Attention one. The comparison is deterministic; only the
+> wording is generated.
+
+## 8. Admin — 30s
+
+Requires `npx tsx scripts/make-admin.ts demo@adaptive.local` and a re-login.
+
+> Who is stuck, which concepts nobody reaches, and source attribution.
+
+---
+
+## If something fails
+
+| Symptom | Cause |
+|---|---|
+| `AI_NOT_CONFIGURED` | `GROQ_API_KEY` missing from `.env` |
+| `AI_UNAVAILABLE` | Rate limit. Switch `LLM_PROVIDER` to `gemini` or `ollama` |
+| Material Q&A slow on first ask | Embedding model loading, ~2s once per process |
+| Empty Progress | `npm run db:demo` not run |
+
+## Reset
+
+If the demo data gets poked at and needs a fresh start:
+
+```bash
+npm run db:reset-demo
+```
+
+This wipes all learner data (keeping courses and concepts) and re-seeds the demo account.

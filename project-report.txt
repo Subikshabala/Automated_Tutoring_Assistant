@@ -1,0 +1,1040 @@
+]633;E;{   echo "===== PROJECT STRUCTURE ====="\x3b   if command -v tree >/dev/null 2>&1\x3b then     tree -a -I 'node_modules|.git|dist|build|.next|coverage'\x3b   else     find . -type d \\( -name node_modules -o -name .git -o -name dist -o -name build -o -name .next \\) -prune -o -type f -print\x3b   fi\x3b    for f in README.md package.json .env.example            prisma/schema.prisma tsconfig.json\x3b   do     if [ -f "$f" ]\x3b then       echo\x3b       echo "===== $f ====="\x3b       cat "$f"\x3b     fi\x3b   done\x3b } > project-report.txt;b3a24be3-836f-4b0f-bb1f-2def5b9fa247]633;C===== PROJECT STRUCTURE =====
+./.env
+./.env.example
+./.gitignore
+./.prettierignore
+./.prettierrc
+./AGENTS.md
+./app/admin/loading.tsx
+./app/admin/page.tsx
+./app/api/admin/courses/route.ts
+./app/api/admin/learners/route.ts
+./app/api/admin/sources/route.ts
+./app/api/admin/sources/[id]/route.ts
+./app/api/admin/stats/route.ts
+./app/api/ai/ask/route.ts
+./app/api/ai/explain/route.ts
+./app/api/assessments/generate/route.ts
+./app/api/assessments/[id]/route.ts
+./app/api/assessments/[id]/submit/route.ts
+./app/api/auth/login/route.ts
+./app/api/auth/logout/route.ts
+./app/api/auth/me/route.ts
+./app/api/auth/register/route.ts
+./app/api/concept-maps/route.ts
+./app/api/concept-maps/[id]/compare/route.ts
+./app/api/concept-maps/[id]/route.ts
+./app/api/courses/route.ts
+./app/api/courses/[slug]/concepts/route.ts
+./app/api/courses/[slug]/route.ts
+./app/api/diagnostic/route.ts
+./app/api/learning/heartbeat/route.ts
+./app/api/materials/route.ts
+./app/api/materials/[id]/query/route.ts
+./app/api/materials/[id]/route.ts
+./app/api/materials/[id]/suggestions/route.ts
+./app/api/misconceptions/[id]/repair/route.ts
+./app/api/progress/route.ts
+./app/api/recommendations/route.ts
+./app/assessment/[id]/loading.tsx
+./app/assessment/[id]/page.tsx
+./app/concept-map/loading.tsx
+./app/concept-map/page.tsx
+./app/courses/[slug]/loading.tsx
+./app/courses/[slug]/map/loading.tsx
+./app/courses/[slug]/map/page.tsx
+./app/courses/[slug]/my-map/loading.tsx
+./app/courses/[slug]/my-map/page.tsx
+./app/courses/[slug]/not-found.tsx
+./app/courses/[slug]/page.tsx
+./app/error.tsx
+./app/explore/loading.tsx
+./app/explore/page.tsx
+./app/favicon.ico
+./app/generated/prisma/browser.ts
+./app/generated/prisma/client.ts
+./app/generated/prisma/commonInputTypes.ts
+./app/generated/prisma/enums.ts
+./app/generated/prisma/internal/class.ts
+./app/generated/prisma/internal/prismaNamespace.ts
+./app/generated/prisma/internal/prismaNamespaceBrowser.ts
+./app/generated/prisma/models/Answer.ts
+./app/generated/prisma/models/Assessment.ts
+./app/generated/prisma/models/Concept.ts
+./app/generated/prisma/models/ConceptExplanation.ts
+./app/generated/prisma/models/ConceptMap.ts
+./app/generated/prisma/models/ConceptMapEdge.ts
+./app/generated/prisma/models/ConceptMapNode.ts
+./app/generated/prisma/models/ConceptRelationship.ts
+./app/generated/prisma/models/Course.ts
+./app/generated/prisma/models/LearningProgress.ts
+./app/generated/prisma/models/LearningSession.ts
+./app/generated/prisma/models/Mastery.ts
+./app/generated/prisma/models/Material.ts
+./app/generated/prisma/models/MaterialChunk.ts
+./app/generated/prisma/models/Misconception.ts
+./app/generated/prisma/models/Module.ts
+./app/generated/prisma/models/Question.ts
+./app/generated/prisma/models/Source.ts
+./app/generated/prisma/models/Topic.ts
+./app/generated/prisma/models/User.ts
+./app/generated/prisma/models.ts
+./app/global-error.tsx
+./app/globals.css
+./app/layout.tsx
+./app/learn/[slug]/[topicId]/loading.tsx
+./app/learn/[slug]/[topicId]/page.tsx
+./app/login/page.tsx
+./app/materials/loading.tsx
+./app/materials/materials-client.tsx
+./app/materials/page.tsx
+./app/materials/[id]/loading.tsx
+./app/materials/[id]/page.tsx
+./app/not-found.tsx
+./app/opengraph-image.tsx
+./app/page.tsx
+./app/profile/loading.tsx
+./app/profile/page.tsx
+./app/progress/loading.tsx
+./app/progress/page.tsx
+./app/register/page.tsx
+./CLAUDE.md
+./components/.gitkeep
+./components/admin-source-actions.tsx
+./components/app-shell.tsx
+./components/assessment-result.tsx
+./components/assessment-runner.tsx
+./components/auth-form.tsx
+./components/concept-detail-panel.tsx
+./components/concept-edge.tsx
+./components/concept-explanation.tsx
+./components/concept-map-canvas.tsx
+./components/concept-map-legend.tsx
+./components/concept-node.tsx
+./components/concept-palette.tsx
+./components/conditional-shell.tsx
+./components/course-card.tsx
+./components/course-curriculum.tsx
+./components/course-filters.tsx
+./components/course-progress-card.tsx
+./components/diagnostic-prompt.tsx
+./components/difficulty-badge.tsx
+./components/how-it-works.tsx
+./components/learn-view.tsx
+./components/map-comparison.tsx
+./components/map-editor.tsx
+./components/map-workspace.tsx
+./components/mastery-bar.tsx
+./components/material-list.tsx
+./components/material-qa.tsx
+./components/material-upload.tsx
+./components/misconception-list.tsx
+./components/mode-toggle.tsx
+./components/nav-main.tsx
+./components/question-card.tsx
+./components/recommendation-card.tsx
+./components/start-assessment-button.tsx
+./components/theme-provider.tsx
+./components/tutor-chat.tsx
+./components/ui/accordion.tsx
+./components/ui/alert.tsx
+./components/ui/avatar.tsx
+./components/ui/badge.tsx
+./components/ui/breadcrumb.tsx
+./components/ui/button.tsx
+./components/ui/card.tsx
+./components/ui/dialog.tsx
+./components/ui/dropdown-menu.tsx
+./components/ui/empty.tsx
+./components/ui/field.tsx
+./components/ui/input.tsx
+./components/ui/label.tsx
+./components/ui/progress.tsx
+./components/ui/radio-group.tsx
+./components/ui/scroll-area.tsx
+./components/ui/separator.tsx
+./components/ui/sheet.tsx
+./components/ui/sidebar.tsx
+./components/ui/skeleton.tsx
+./components/ui/sonner.tsx
+./components/ui/spinner.tsx
+./components/ui/tabs.tsx
+./components/ui/textarea.tsx
+./components/ui/tooltip.tsx
+./components/user-menu.tsx
+./components.json
+./dev.db
+./docs/DEMO.md
+./docs/media/adaptive-demo-walkthrough.mp4
+./docs/superpowers/plans/phase-00-foundation.md
+./docs/superpowers/plans/phase-01-course-catalog.md
+./docs/superpowers/plans/phase-02-concept-map.md
+./docs/superpowers/plans/phase-03-ai-tutor.md
+./docs/superpowers/plans/phase-04-assessment-mastery.md
+./docs/superpowers/plans/phase-05-materials-rag.md
+./docs/superpowers/plans/phase-06-student-maps.md
+./docs/superpowers/plans/phase-07-adaptive-engine.md
+./docs/superpowers/plans/phase-08-auth-admin.md
+./docs/superpowers/plans/phase-09-polish.md
+./docs/superpowers/plans/README.md
+./docs/superpowers/plans/v2/A1-ai-provider-swap.md
+./docs/superpowers/plans/v2/A2-fix-menu-crash.md
+./docs/superpowers/plans/v2/A3-fix-concept-map-route.md
+./docs/superpowers/plans/v2/B1-local-embeddings.md
+./docs/superpowers/plans/v2/B2-hybrid-retrieval.md
+./docs/superpowers/plans/v2/B3-material-qa-ux.md
+./docs/superpowers/plans/v2/C1-layout-spacing.md
+./docs/superpowers/plans/v2/C2-edge-styling.md
+./docs/superpowers/plans/v2/C3-panel-navigation.md
+./docs/superpowers/plans/v2/D1-fix-add-node.md
+./docs/superpowers/plans/v2/D2-concept-palette.md
+./docs/superpowers/plans/v2/E1-recommendation-copy.md
+./docs/superpowers/plans/v2/E2-curriculum-accordion.md
+./docs/superpowers/plans/v2/F1-landing-progress-line.md
+./docs/superpowers/plans/v2/F2-sidebar-rail-seam.md
+./docs/superpowers/plans/v2/G1-diagnostic-assessment.md
+./docs/superpowers/plans/v2/G2-session-tracking.md
+./docs/superpowers/plans/v2/G3-misconceptions.md
+./docs/superpowers/plans/v2/G4-admin-real.md
+./docs/superpowers/plans/v2/G5-demo-walkthrough.md
+./docs/superpowers/plans/v2/README.md
+./eslint.config.mjs
+./hooks/.gitkeep
+./hooks/use-learning-heartbeat.ts
+./hooks/use-mobile.ts
+./hooks/use-scroll-progress.ts
+./lib/.gitkeep
+./lib/adaptive.ts
+./lib/ai/assessment.ts
+./lib/ai/client.ts
+./lib/ai/coach.ts
+./lib/ai/map-feedback.ts
+./lib/ai/material.ts
+./lib/ai/prompts.ts
+./lib/ai/providers.ts
+./lib/ai/tutor.ts
+./lib/api.ts
+./lib/assessment-service.ts
+./lib/auth/guard.ts
+./lib/auth/password.ts
+./lib/auth/session.ts
+./lib/concept-edge-style.ts
+./lib/concept-layout.ts
+./lib/diagnostic.ts
+./lib/fetcher.ts
+./lib/grading.ts
+./lib/json-array.ts
+./lib/map-compare.ts
+./lib/mastery.ts
+./lib/prisma.ts
+./lib/query-provider.tsx
+./lib/repositories/admin.ts
+./lib/repositories/assessment.ts
+./lib/repositories/concept.ts
+./lib/repositories/course.ts
+./lib/repositories/explanation.ts
+./lib/repositories/learning.ts
+./lib/repositories/mastery.ts
+./lib/repositories/material.ts
+./lib/repositories/misconception.ts
+./lib/repositories/progress.ts
+./lib/repositories/source.ts
+./lib/repositories/student-map.ts
+./lib/repositories/user.ts
+./lib/schemas/ai.ts
+./lib/schemas/assessment.ts
+./lib/schemas/auth.ts
+./lib/schemas/common.ts
+./lib/schemas/concept.ts
+./lib/schemas/course.ts
+./lib/schemas/material.ts
+./lib/schemas/recommendation.ts
+./lib/schemas/source.ts
+./lib/schemas/student-map.ts
+./lib/text/chunk.ts
+./lib/text/embed.ts
+./lib/text/extract.ts
+./lib/text/retrieve.ts
+./lib/utils.ts
+./next-env.d.ts
+./next.config.ts
+./package-lock.json
+./package.json
+./postcss.config.mjs
+./prisma/migrations/20261007175941_init/migration.sql
+./prisma/migrations/20261007184640_add_concept_explanation/migration.sql
+./prisma/migrations/20261008210440_add_diagnosed_courses/migration.sql
+./prisma/migrations/20261008211442_add_chunk_embedding/migration.sql
+./prisma/migrations/20261008212307_add_material_suggestions/migration.sql
+./prisma/migrations/migration_lock.toml
+./prisma/schema.prisma
+./prisma/seed-data/ai-agents.ts
+./prisma/seed-data/cybersecurity.ts
+./prisma/seed-data/generative-ai.ts
+./prisma/seed-data/types.ts
+./prisma/seed.ts
+./prisma.config.ts
+./PROGRESS.md
+./project-report.txt
+./proxy.ts
+./public/.gitkeep
+./README.md
+./scripts/backfill-embeddings.ts
+./scripts/make-admin.ts
+./scripts/reset-demo.ts
+./scripts/seed-demo.ts
+./SETUP_GUIDE.md
+./skills/shadcn.md
+./structure.txt
+./test-results/.last-run.json
+./tests/ai/assessment.test.ts
+./tests/ai/client.test.ts
+./tests/ai/coach.test.ts
+./tests/ai/map-feedback.test.ts
+./tests/ai/material.test.ts
+./tests/ai/prompts.test.ts
+./tests/ai/providers.test.ts
+./tests/ai/tutor.test.ts
+./tests/api/admin-learners.test.ts
+./tests/api/admin-sources.test.ts
+./tests/api/admin-stats.test.ts
+./tests/api/admin.test.ts
+./tests/api/ai.test.ts
+./tests/api/assessments.test.ts
+./tests/api/auth.test.ts
+./tests/api/concept-maps.test.ts
+./tests/api/concepts.test.ts
+./tests/api/course-detail.test.ts
+./tests/api/courses.test.ts
+./tests/api/diagnostic.test.ts
+./tests/api/heartbeat.test.ts
+./tests/api/materials.test.ts
+./tests/api/progress.test.ts
+./tests/auth/guard.test.ts
+./tests/auth/password.test.ts
+./tests/auth/session.test.ts
+./tests/components/app-shell.test.tsx
+./tests/components/assessment-result.test.tsx
+./tests/components/auth-form.test.tsx
+./tests/components/concept-detail-panel.test.tsx
+./tests/components/concept-explanation.test.tsx
+./tests/components/concept-map-canvas.test.ts
+./tests/components/concept-node.test.tsx
+./tests/components/concept-palette.test.tsx
+./tests/components/course-card.test.tsx
+./tests/components/course-curriculum.test.tsx
+./tests/components/course-filters.test.tsx
+./tests/components/how-it-works.test.tsx
+./tests/components/learn-view.test.tsx
+./tests/components/map-comparison.test.tsx
+./tests/components/map-editor-render.test.tsx
+./tests/components/map-editor.test.ts
+./tests/components/material-list.test.tsx
+./tests/components/material-qa.test.tsx
+./tests/components/material-upload.test.tsx
+./tests/components/nav-main.test.tsx
+./tests/components/question-card.test.tsx
+./tests/components/recommendation-card.test.tsx
+./tests/components/tutor-chat.test.tsx
+./tests/components/user-menu.test.tsx
+./tests/hooks/use-scroll-progress.test.ts
+./tests/lib/adaptive.test.ts
+./tests/lib/api.test.ts
+./tests/lib/assessment-service.test.ts
+./tests/lib/concept-edge-style.test.ts
+./tests/lib/concept-layout.test.ts
+./tests/lib/diagnostic.test.ts
+./tests/lib/fetcher.test.ts
+./tests/lib/grading.test.ts
+./tests/lib/json-array.test.ts
+./tests/lib/map-compare.test.ts
+./tests/lib/mastery.test.ts
+./tests/lib/prisma.test.ts
+./tests/lib/query-provider.test.tsx
+./tests/lib/schemas-ai.test.ts
+./tests/lib/schemas-assessment.test.ts
+./tests/lib/schemas-auth.test.ts
+./tests/lib/schemas-material.test.ts
+./tests/lib/schemas-recommendation.test.ts
+./tests/lib/schemas-student-map.test.ts
+./tests/lib/schemas.test.ts
+./tests/lib/source-transitions.test.ts
+./tests/repositories/admin.test.ts
+./tests/repositories/assessment.test.ts
+./tests/repositories/concept.test.ts
+./tests/repositories/course.test.ts
+./tests/repositories/explanation.test.ts
+./tests/repositories/learning.test.ts
+./tests/repositories/mastery.test.ts
+./tests/repositories/material.test.ts
+./tests/repositories/misconception.test.ts
+./tests/repositories/progress.test.ts
+./tests/repositories/student-map.test.ts
+./tests/repositories/topic.test.ts
+./tests/repositories/user.test.ts
+./tests/sanity.test.ts
+./tests/setup.ts
+./tests/text/chunk.test.ts
+./tests/text/embed.test.ts
+./tests/text/extract.test.ts
+./tests/text/hybrid.test.ts
+./tests/text/retrieve.test.ts
+./tsconfig.json
+./vitest.config.ts
+
+===== README.md =====
+# Adaptive — AI Learning Platform
+
+An AI tutor that assesses understanding concept by concept, then teaches the
+gaps in prerequisite order.
+
+## What it does
+
+- **Course catalog** — browse courses organised as prerequisite graphs, not linear syllabi
+- **Concept maps** — interactive prerequisite graphs with themed edges, animated dependencies, detail panels and navigable cross-references
+- **AI tutor** — LLM-generated explanations with follow-up chat, grounded in the course definitions
+- **Assessment** — generated quizzes; MCQs graded deterministically, short answers graded semantically by the model
+- **Diagnostic assessment** — on first course visit, a short diagnostic places you on the map before you start
+- **Mastery tracking** — EMA-smoothed score per concept, updated from assessment results
+- **Adaptive recommendations** — situation-aware recommendations (blocked, shaky, nearly there, ready) with human-written reasons
+- **Misconception tracking** — the model detects specific wrong beliefs from short-answer phrasing and offers Socratic repair
+- **Session tracking** — learning sessions recorded automatically with resume support
+- **Your own materials** — upload a PDF or text file, ask questions answered by hybrid semantic + keyword retrieval running locally
+- **Student concept maps** — draw your own map, compare it against the canonical one, get specific structural feedback
+- **Admin dashboard** — real analytics: who is stuck, which concepts are unreached, source attribution
+- **Scroll-progress landing** — step-by-step connector that fills as you scroll through "How it works"
+- **Curriculum accordion** — first module open, rest collapsed, expandable
+
+## Try it quickly
+
+```bash
+npm install --legacy-peer-deps
+cp .env.example .env     # add GROQ_API_KEY from console.groq.com
+npx prisma migrate deploy
+npx prisma generate
+npm run db:seed          # 3 courses, 28 concepts
+npm run db:demo          # a learner with history
+npm run dev
+```
+
+Sign in as `demo@adaptive.local` / `demo-password-1234`, then follow
+[`docs/DEMO.md`](./docs/DEMO.md).
+
+## Setup
+
+Requires Node 20 or later.
+
+```bash
+npm install --legacy-peer-deps
+cp .env.example .env
+```
+
+Fill in `.env`:
+
+- `LLM_PROVIDER` — one of `groq` (default), `gemini`, `openrouter`, `cerebras`, `ollama`
+- The API key for your chosen provider (e.g. `GROQ_API_KEY` from [console.groq.com](https://console.groq.com))
+- `JWT_SECRET` — generate with `openssl rand -base64 32`
+
+Then set up the database:
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+npm run db:seed
+```
+
+## Running
+
+```bash
+npm run dev          # development server on :3000
+npm run build        # production build
+npm run start        # production server
+npm test             # test suite
+npm run typecheck    # type check
+npm run lint         # lint
+npm run db:demo      # seed a demo learner with realistic history
+npm run db:reset-demo # wipe learner data and re-seed
+npm run db:embed     # backfill embeddings for uploaded materials
+```
+
+## Making yourself an admin
+
+Register an account through the UI, then:
+
+```bash
+npx tsx scripts/make-admin.ts your@email.com
+```
+
+Sign out and back in — the role is carried in the session token.
+
+## Architecture
+
+Single Next.js 16 App Router application. Server-side Route Handlers under
+`app/api/` replace a separate backend. Prisma 7 with libsql adapter and SQLite for persistence.
+
+| Directory | Contents |
+|---|---|
+| `app/` | Routes, pages and API handlers |
+| `components/` | React components (`ui/` is shadcn-generated) |
+| `lib/` | Domain logic, repositories, AI services, schemas |
+| `lib/ai/` | OpenAI-compatible client with 5 providers by env var |
+| `lib/text/` | Local embeddings (HuggingFace all-MiniLM-L6-v2), chunking, hybrid retrieval |
+| `lib/repositories/` | All Prisma access |
+| `lib/schemas/` | Zod contracts — the source of truth for types |
+| `prisma/` | Schema, migrations, seed data |
+| `tests/` | Vitest suite, mirroring the source layout |
+| `scripts/` | CLI tools: admin, demo seed, embedding backfill |
+
+### Rules this codebase follows
+
+1. No faked implementations. If something cannot be built, it is not shipped.
+2. API keys are read server-side only and never reach the client.
+3. Every AI response is validated with Zod before it touches the database or the UI.
+4. Route Handlers return `{ data }` on success and `{ error: { code, message } }` on failure.
+5. Authorisation is enforced in every handler, not only in `proxy.ts`.
+
+## Implementation plans
+
+The phase-by-phase plans used to build this live in
+[`docs/superpowers/plans/`](./docs/superpowers/plans/).
+
+===== package.json =====
+{
+  "name": "opencode-app",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "format": "prettier --write \"**/*.{ts,tsx}\"",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:embed": "tsx scripts/backfill-embeddings.ts",
+    "db:demo": "tsx scripts/seed-demo.ts",
+    "db:reset-demo": "tsx scripts/reset-demo.ts"
+  },
+  "dependencies": {
+    "@base-ui/react": "^1.8.0",
+    "@huggingface/transformers": "^4.3.1",
+    "@libsql/client": "^0.18.0",
+    "@prisma/adapter-libsql": "^7.10.0",
+    "@prisma/client": "^7.10.0",
+    "@tanstack/react-query": "^5.104.1",
+    "@xyflow/react": "^12.12.0",
+    "bcryptjs": "^3.0.3",
+    "class-variance-authority": "^0.7.1",
+    "cn": "^0.4.0",
+    "jose": "^6.2.12",
+    "lucide-react": "^1.52.0",
+    "next": "16.3.6",
+    "next-themes": "^0.4.6",
+    "openai": "^7.30.1",
+    "pdf-parse": "^2.4.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "shadcn": "^4.21.4",
+    "sonner": "^2.0.8",
+    "tw-animate-css": "^1.4.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.2",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@testing-library/user-event": "^14.6.7",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/node": "^20",
+    "@types/pdf-parse": "^1.1.5",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6.1.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "jsdom": "^29.1.1",
+    "prettier": "^3.9.9",
+    "prettier-plugin-tailwindcss": "^0.8.1",
+    "prisma": "^7.10.0",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vite": "^8.3.3",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^5.0.3"
+  }
+}
+
+===== .env.example =====
+# SQLite database file.
+DATABASE_URL="file:./dev.db"
+
+# --- LLM provider -----------------------------------------------------
+# One of: groq | gemini | openrouter | cerebras | ollama
+LLM_PROVIDER="groq"
+
+# Model id for the chosen provider. See the table in
+# docs/superpowers/plans/v2/A1-ai-provider-swap.md
+LLM_MODEL="openai/gpt-oss-20b"
+
+# Only the key for your chosen provider needs a value.
+GROQ_API_KEY=""
+GEMINI_API_KEY=""
+OPENROUTER_API_KEY=""
+CEREBRAS_API_KEY=""
+
+# Secret for signing session JWTs. Generate with: openssl rand -base64 32
+JWT_SECRET=""
+
+===== prisma/schema.prisma =====
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum MasteryStatus {
+  NOT_STARTED
+  LEARNING
+  PRACTICING
+  MASTERED
+  NEEDS_REVIEW
+}
+
+enum RelationshipType {
+  PREREQUISITE_OF
+  RELATED_TO
+  PART_OF
+  LEADS_TO
+}
+
+enum QuestionType {
+  MCQ
+  SHORT_ANSWER
+  SCENARIO
+}
+
+enum Difficulty {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum SourceStatus {
+  DRAFT
+  INGESTED
+  PROCESSED
+  IN_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+enum MaterialStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  role         Role     @default(USER)
+  /// JSON string[] of course slugs whose diagnostic is done or skipped.
+  diagnosedCourses String @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions    LearningSession[]
+  progress    LearningProgress[]
+  mastery     Mastery[]
+  assessments Assessment[]
+  materials   Material[]
+  conceptMaps ConceptMap[]
+}
+
+model Course {
+  id          String     @id @default(cuid())
+  slug        String     @unique
+  title       String
+  description String
+  category    String
+  difficulty  Difficulty @default(BEGINNER)
+  estimatedHours Int     @default(0)
+  published   Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  modules     Module[]
+  concepts    Concept[]
+  sources     Source[]
+  sessions    LearningSession[]
+  conceptMaps ConceptMap[]
+
+  @@index([category])
+}
+
+model Module {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String
+  description String
+  order       Int
+  createdAt   DateTime @default(now())
+
+  course   Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topics   Topic[]
+  concepts Concept[]
+
+  @@unique([courseId, order])
+  @@index([courseId])
+}
+
+model Topic {
+  id          String   @id @default(cuid())
+  moduleId    String
+  title       String
+  description String
+  order       Int
+  createdAt   DateTime @default(now())
+
+  module   Module    @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  concepts Concept[]
+  sources  Source[]
+  sessions LearningSession[]
+
+  @@unique([moduleId, order])
+  @@index([moduleId])
+}
+
+model Concept {
+  id          String     @id @default(cuid())
+  courseId    String
+  moduleId    String?
+  topicId     String?
+  name        String
+  definition  String
+  difficulty  Difficulty @default(BEGINNER)
+  objectives  String     @default("[]")
+  order       Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  course Course  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module Module? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  topic  Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  outgoing      ConceptRelationship[] @relation("FromConcept")
+  incoming      ConceptRelationship[] @relation("ToConcept")
+  mastery       Mastery[]
+  misconceptions Misconception[]
+  questions     Question[]
+  progress      LearningProgress[]
+  mapNodes      ConceptMapNode[]
+  explanation   ConceptExplanation?
+
+  @@index([courseId])
+  @@index([topicId])
+}
+
+model ConceptRelationship {
+  id        String           @id @default(cuid())
+  fromId    String
+  toId      String
+  type      RelationshipType
+  strength  Float            @default(1.0)
+  createdAt DateTime         @default(now())
+
+  from Concept @relation("FromConcept", fields: [fromId], references: [id], onDelete: Cascade)
+  to   Concept @relation("ToConcept", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, type])
+  @@index([fromId])
+  @@index([toId])
+}
+
+model Source {
+  id              String       @id @default(cuid())
+  courseId        String?
+  topicId         String?
+  title           String
+  url             String?
+  publisher       String?
+  authorityLevel  Int          @default(4)
+  publicationDate DateTime?
+  version         String?
+  status          SourceStatus @default(DRAFT)
+  lastVerifiedAt  DateTime?
+  createdAt       DateTime     @default(now())
+
+  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  topic  Topic?  @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([courseId])
+}
+
+model LearningSession {
+  id        String    @id @default(cuid())
+  userId    String
+  courseId  String
+  topicId   String?
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topic  Topic? @relation(fields: [topicId], references: [id], onDelete: SetNull)
+
+  @@index([userId, courseId])
+}
+
+model LearningProgress {
+  id          String   @id @default(cuid())
+  userId      String
+  conceptId   String
+  completed   Boolean  @default(false)
+  timeSpentSec Int     @default(0)
+  lastViewedAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conceptId])
+}
+
+model Mastery {
+  id               String        @id @default(cuid())
+  userId           String
+  conceptId        String
+  masteryScore     Float         @default(0)
+  confidenceScore  Float         @default(0)
+  attemptCount     Int           @default(0)
+  correctCount     Int           @default(0)
+  incorrectCount   Int           @default(0)
+  status           MasteryStatus @default(NOT_STARTED)
+  lastAssessmentAt DateTime?
+  lastInteractionAt DateTime     @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, conceptId])
+  @@index([userId, status])
+}
+
+model Misconception {
+  id          String   @id @default(cuid())
+  userId      String
+  conceptId   String
+  description String
+  evidence    String
+  resolved    Boolean  @default(false)
+  detectedAt  DateTime @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+
+  @@index([userId, resolved])
+}
+
+model Assessment {
+  id          String    @id @default(cuid())
+  userId      String
+  courseId    String?
+  topicId     String?
+  kind        String    @default("practice")
+  score       Float?
+  submittedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questions Question[]
+  answers   Answer[]
+
+  @@index([userId])
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  assessmentId  String
+  conceptId     String
+  type          QuestionType
+  prompt        String
+  options       String       @default("[]")
+  correctAnswer String
+  explanation   String
+  difficulty    Difficulty   @default(BEGINNER)
+  order         Int          @default(0)
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  concept    Concept    @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+  answers    Answer[]
+
+  @@index([assessmentId])
+}
+
+model Answer {
+  id           String   @id @default(cuid())
+  assessmentId String
+  questionId   String
+  response     String
+  isCorrect    Boolean
+  score        Float    @default(0)
+  feedback     String   @default("")
+  createdAt    DateTime @default(now())
+
+  assessment Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question   Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, questionId])
+}
+
+model Material {
+  id         String         @id @default(cuid())
+  userId     String
+  courseId   String?
+  filename   String
+  mimeType   String
+  sizeBytes  Int
+  status     MaterialStatus @default(UPLOADED)
+  error      String?
+  createdAt  DateTime       @default(now())
+
+  /// JSON string[] of generated starter questions. Empty until generated.
+  suggestions String @default("")
+
+  user   User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chunks MaterialChunk[]
+
+  @@index([userId])
+}
+
+model MaterialChunk {
+  id         String @id @default(cuid())
+  materialId String
+  content    String
+  tokenCount Int    @default(0)
+  order      Int
+
+  /// JSON-encoded number[384] from all-MiniLM-L6-v2. Empty until embedded.
+  embedding  String @default("")
+
+  material Material @relation(fields: [materialId], references: [id], onDelete: Cascade)
+
+  @@unique([materialId, order])
+  @@index([materialId])
+}
+
+model ConceptMap {
+  id        String   @id @default(cuid())
+  userId    String
+  courseId  String
+  title     String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  nodes  ConceptMapNode[]
+  edges  ConceptMapEdge[]
+
+  @@index([userId, courseId])
+}
+
+model ConceptMapNode {
+  id        String  @id @default(cuid())
+  mapId     String
+  conceptId String?
+  label     String
+  x         Float   @default(0)
+  y         Float   @default(0)
+
+  map     ConceptMap @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  concept Concept?   @relation(fields: [conceptId], references: [id], onDelete: SetNull)
+
+  outgoing ConceptMapEdge[] @relation("MapFrom")
+  incoming ConceptMapEdge[] @relation("MapTo")
+
+  @@index([mapId])
+}
+
+model ConceptMapEdge {
+  id     String           @id @default(cuid())
+  mapId  String
+  fromId String
+  toId   String
+  type   RelationshipType @default(RELATED_TO)
+  label  String?
+
+  map  ConceptMap     @relation(fields: [mapId], references: [id], onDelete: Cascade)
+  from ConceptMapNode @relation("MapFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   ConceptMapNode @relation("MapTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([mapId, fromId, toId])
+  @@index([mapId])
+}
+
+model ConceptExplanation {
+  id                String   @id @default(cuid())
+  conceptId         String   @unique
+  title             String
+  simpleExplanation String
+  whyItMatters      String
+  example           String
+  keyPoints         String   @default("[]")
+  checkQuestion     String
+  model             String
+  createdAt         DateTime @default(now())
+
+  concept Concept @relation(fields: [conceptId], references: [id], onDelete: Cascade)
+}
+
+===== tsconfig.json =====
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["dom", "dom.iterable", "esnext"],
+    "allowJs": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ],
+    "paths": {
+      "@/*": ["./*"]
+    }
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    "**/*.mts"
+  ],
+  "exclude": ["node_modules"]
+}
