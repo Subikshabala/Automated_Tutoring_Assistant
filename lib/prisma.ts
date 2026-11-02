@@ -1,19 +1,23 @@
 import { PrismaClient } from '@/app/generated/prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
+import { PrismaPg } from '@prisma/adapter-pg'
 
-import path from 'node:path'
+const connectionString = process.env.DATABASE_URL
 
-function createPrismaClient() {
-  const dbPath = path.resolve(process.cwd(), 'dev.db')
-  const adapter = new PrismaLibSql({ url: `file:${dbPath}` })
-  return new PrismaClient({ adapter })
+if (!connectionString) {
+  throw new Error('DATABASE_URL is not configured')
 }
+
+const adapter = new PrismaPg({
+  connectionString,
+})
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-const prisma = globalForPrisma.prisma ?? createPrismaClient()
+const prisma =
+  globalForPrisma.prisma ??
+  new PrismaClient({ adapter })
 
 if (process.env.NODE_ENV !== 'production') {
   globalForPrisma.prisma = prisma

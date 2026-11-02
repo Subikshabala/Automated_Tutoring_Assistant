@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 enum Role {
@@ -13,7 +13,7 @@ enum Role {
 }
 
 enum MasteryStatus {
-  NOT_STARTED
+  NOT_STARTED 
   LEARNING
   PRACTICING
   MASTERED

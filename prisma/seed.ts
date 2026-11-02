@@ -1,13 +1,18 @@
+import 'dotenv/config'
 import { PrismaClient } from '../app/generated/prisma/client'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
-import path from 'node:path'
+import { PrismaPg } from '@prisma/adapter-pg'
 import type { SeedCourse } from './seed-data/types'
 import { generativeAi } from './seed-data/generative-ai'
 import { cybersecurity } from './seed-data/cybersecurity'
 import { aiAgents } from './seed-data/ai-agents'
 
-const dbPath = path.resolve(process.cwd(), 'dev.db')
-const adapter = new PrismaLibSql({ url: `file:${dbPath}` })
+const connectionString = process.env.DATABASE_URL
+
+if (!connectionString) {
+  throw new Error('DATABASE_URL is not configured')
+}
+
+const adapter = new PrismaPg({ connectionString })
 const prisma = new PrismaClient({ adapter })
 
 const COURSES: SeedCourse[] = [generativeAi, cybersecurity, aiAgents]
